@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Financial Simulation</h1>
+        <form id="simulationForm">
+            <label for="income">Monthly Income:</label>
+            <input type="number" id="income" required>
+            
+            <label for="savingsRate">Monthly Savings Rate (%):</label>
+            <input type="number" id="savingsRate" min="0" max="100" required>
+            
+            <label for="salaryIncrease">Salary Increase Amount:</label>
+            <input type="number" id="salaryIncrease" required>
+            
+            <label for="salaryIncreaseFrequency">Salary Increase Frequency (years):</label>
+            <input type="number" id="salaryIncreaseFrequency" required>
+            
+            <button type="submit">Run Simulation</button>
+        </form>
+        
+        <div id="results">
+            <canvas id="portfolioChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Constants
+        const MONTHS_TO_RETIREMENT = 25 * 12;
+        const CASH_RESERVE_MONTHS = 6;
+        const REAL_ESTATE_PURCHASE_FREQUENCY = 5 * 12;
+        const REAL_ESTATE_PRICE = 1000000;
+        const REAL_ESTATE_APPRECIATION = 0.04 / 12;
+        const REAL_ESTATE_RENTAL_YIELD = 0.05 / 12;
+        const QQQ_MEAN_RETURN = 0.15 / 12;
+        const QQQ_VOLATILITY = 0.25 / Math.sqrt(12);
+        const VOO_MEAN_RETURN = 0.10 / 12;
+        const VOO_VOLATILITY = 0.18 / Math.sqrt(12);
+        const DEPOSIT_FEE_RATE = 0.001;
+        const WITHDRAWAL_TAX_RATE = 0.15;
+        const ANNUAL_FUND_EXPENSE_RATIO = 0.003;
+
+        function runMonthlySimulation(initialSalary, salaryIncrease, salaryIncreaseFrequency, savingsRate) {
+            let results = [];
+            let salary = initialSalary;
+            let cashReserve = 0;
+            let realEstateValue = 0;
+            let realEstateIncome = 0;
+            let qqqValue = 0;
+            let vooValue = 0;
+            
+            for (let month = 1; month <= MONTHS_TO_RETIREMENT; month++) {
+                if (month % (salaryIncreaseFrequency * 12) === 1 && month > 1) {
+                    salary += salaryIncrease;
+                }
+                
+                let monthlySavings = salary * (savingsRate / 100);
+                let expenses = salary * (1 - savingsRate / 100);
+                
+                // Update cash reserve
+                let targetCashReserve = expenses * CASH_RESERVE_MONTHS;
+                cashReserve = Math.min(targetCashReserve, cashReserve + monthlySavings);
+                let investableAmount = monthlySavings + realEstateIncome - (targetCashReserve - cashReserve);
+                
+                // Real estate purchase and income
+                let realEstatePurchase = 0;
+                if (month % REAL_ESTATE_PURCHASE_FREQUENCY === 0) {
+                    let propertyPrice = REAL_ESTATE_PRICE * Math.pow(1 + REAL_ESTATE_APPRECIATION, month);
+                    if (investableAmount >= propertyPrice) {
+                        investableAmount -= propertyPrice;
+                        realEstateValue += propertyPrice;
+                        realEstatePurchase = propertyPrice;
+                    } else if (qqqValue + vooValue >= propertyPrice) {
+                        let sellAmount = propertyPrice - investableAmount;
+                        let qqqSell = sellAmount * qqqValue / (qqqValue + vooValue);
+                        let vooSell = sellAmount - qqqSell;
+                        
+                        // Apply withdrawal tax
+                        let qqqSellAfterTax = qqqSell * (1 - WITHDRAWAL_TAX_RATE);
+                        let vooSellAfterTax = vooSell * (1 - WITHDRAWAL_TAX_RATE);
+                        
+                        qqqValue -= qqqSell;
+                        vooValue -= vooSell;
+                        realEstateValue += propertyPrice;
+                        realEstatePurchase = propertyPrice;
+                        investableAmount = 0;
+                    }
+                }
+                
+                realEstateValue *= (1 + REAL_ESTATE_APPRECIATION);
+                realEstateIncome = realEstateValue * REAL_ESTATE_RENTAL_YIELD;
+                
+                // Invest in QQQ and VOO
+                let qqqInvestment = 0;
+                let vooInvestment = 0;
+                if (investableAmount > 0) {
+                    let investableAmountAfterFee = investableAmount * (1 - DEPOSIT_FEE_RATE);
+                    qqqInvestment = investableAmountAfterFee * 0.6;
+                    vooInvestment = investableAmountAfterFee * 0.4;
+                    qqqValue += qqqInvestment;
+                    vooValue += vooInvestment;
+                }
+                
+                // Apply monthly expense ratio
+                let monthlyExpenseRatio = ANNUAL_FUND_EXPENSE_RATIO / 12;
+                qqqValue *= (1 - monthlyExpenseRatio);
+                vooValue *= (1 - monthlyExpenseRatio);
+                
+                let qqqReturn = jStat.normal.inv(Math.random(), QQQ_MEAN_RETURN, QQQ_VOLATILITY);
+                let vooReturn = jStat.normal.inv(Math.random(), VOO_MEAN_RETURN, VOO_VOLATILITY);
+                qqqValue *= (1 + qqqReturn);
+                vooValue *= (1 + vooReturn);
+                
+                let totalPortfolio = qqqValue + vooValue + realEstateValue + cashReserve;
+                
+                results.push({
+                    month: month,
+                    salary: salary,
+                    monthlySavings: monthlySavings,
+                    qqqValue: qqqValue,
+                    vooValue: vooValue,
+                    realEstateValue: realEstateValue,
+                    cashReserve: cashReserve,
+                    totalPortfolio: totalPortfolio,
+                    realEstateIncome: realEstateIncome,
+                    qqqInvestment: qqqInvestment,
+                    vooInvestment: vooInvestment,
+                    realEstatePurchase: realEstatePurchase
+                });
+            }
+            
+            return results;
+        }
+
+        function displayResults(results) {
+            const ctx = document.getElementById('portfolioChart').getContext('2d');
+            
+            const labels = results.map(r => r.month);
+            const qqqData = results.map(r => r.qqqValue);
+            const vooData = results.map(r => r.vooValue);
+            const realEstateData = results.map(r => r.realEstateValue);
+            const cashData = results.map(r => r.cashReserve);
+            const totalData = results.map(r => r.totalPortfolio);
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'QQQ Value',
+                            data: qqqData,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            fill: false
+                        },
+                        {
+                            label: 'VOO Value',
+                            data: vooData,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            fill: false
+                        },
+                        {
+                            label: 'Real Estate Value',
+                            data: realEstateData,
+                            borderColor: 'rgba(255, 206, 86, 1)',
+                            fill: false
+                        },
+                        {
+                            label: 'Cash Reserve',
+                            data: cashData,
+                            borderColor: 'rgba(153, 102, 255, 1)',
+                            fill: false
+                        },
+                        {
+                            label: 'Total Portfolio',
+                            data: totalData,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    title: {
+                        display: true,
+                        text: 'Portfolio Growth Over Time'
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Month'
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.getElementById('simulationForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const income = parseFloat(document.getElementById('income').value);
+            const savingsRate = parseFloat(document.getElementById('savingsRate').value);
+            const salaryIncrease = parseFloat(document.getElementById('salaryIncrease').value);
+            const salaryIncreaseFrequency = parseFloat(document.getElementById('salaryIncreaseFrequency').value);
+            
+            const results = runMonthlySimulation(income, salaryIncrease, salaryIncreaseFrequency, savingsRate);
+            displayResults(results);
+        });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jstat/1.9.4/jstat.min.js"></script>
+</body>
+</html>
